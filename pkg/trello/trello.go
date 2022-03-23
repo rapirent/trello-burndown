@@ -12,10 +12,12 @@ import (
 )
 
 type cardResult struct {
+	ID			string
 	Error       error
 	Date        string
 	Complete    bool
 	Points      float64
+	TotalPoints float64
 	TrelloError bool
 }
 
@@ -71,27 +73,33 @@ func Run(boardID string) {
 		ID:   boardID,
 		Name: board.Name,
 	}
-	var pointsPerDay = make(map[string]float64)
+	var pointsToday float64 = 0.0;
 	for i := 0; i < len(cards); i++ {
 		response := <-resultChannel
 		if response.Error != nil {
 			log.Fatalln(response.Error)
 		}
+		if response.TotalPoints == 0 {
+			continue
+		}
 		if response.Complete {
 			boardEntity.CardsCompleted++
-			boardEntity.PointsCompleted += response.Points
-			if _, ok := pointsPerDay[response.Date]; ok {
-				pointsPerDay[response.Date] = response.Points + pointsPerDay[response.Date]
-			} else {
-				pointsPerDay[response.Date] = response.Points
-			}
 		}
+		boardEntity.Points += response.TotalPoints
+		boardEntity.PointsCompleted += response.Points
+		pointsToday += response.Points
 		boardEntity.Cards++
-		boardEntity.Points += response.Points
+		lastPoints := getCardLastPointsFromDatabase(response.ID)
+		cardEntity := CardRecord{
+			ID:	response.ID,
+			LastPoints: response.Points,
+		}
+		saveCardToDatabase(cardEntity)
+		pointsToday -= lastPoints
 	}
 	log.Printf("Cards progress: %d/%d", boardEntity.CardsCompleted, boardEntity.Cards)
 	log.Printf("Total points: %f/%f", boardEntity.PointsCompleted, boardEntity.Points)
-	saveToDatabase(boardEntity, pointsPerDay)
+	saveProgressToDatabase(boardEntity, pointsToday)
 }
 
 func getLastList(board *trello.Board) (string, error) {
@@ -110,18 +118,22 @@ func getLastList(board *trello.Board) (string, error) {
 }
 
 func determineCardComplete(card *trello.Card, listID string, res chan *cardResult) {
-	points := getPoints(card)
-	if card.IDList != listID {
-		res <- &cardResult{
-			Complete: false,
-			Points:   points,
-		}
-		return
-	}
+	points, totalPoints := getPoints(card)
 	actions, err := card.GetActions(trello.Defaults())
 	if err != nil {
 		res <- &cardResult{
 			Error: err,
+		}
+		return
+	}
+	if card.IDList != listID {
+		date :=time.Now()
+		res <- &cardResult{
+			ID: 			card.ID,
+			Complete:		false,
+			Date:     		date.Format("2006-01-02"),
+			TotalPoints: 	totalPoints,
+			Points:   		points,
 		}
 		return
 	}
@@ -134,21 +146,28 @@ func determineCardComplete(card *trello.Card, listID string, res chan *cardResul
 		}
 	}
 	res <- &cardResult{
+		ID: card.ID,
 		Complete: true,
 		Date:     date.Format("2006-01-02"),
+		TotalPoints: totalPoints,
 		Points:   points,
 	}
 }
 
-func getPoints(card *trello.Card) float64 {
+func getPoints(card *trello.Card) (float64,float64) {
 	r := regexp.MustCompile(`\(([0-9]*\.[0-9]+|[0-9]+)\)`)
 	matches := r.FindStringSubmatch(card.Name)
 	if len(matches) != 2 {
-		return 0
+		return 0, 0
 	}
-	points, err := strconv.ParseFloat(matches[1], 64)
+	weight, err := strconv.ParseFloat(matches[1], 64)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	return points
+	var points float64 = float64(card.Badges.CheckItemsChecked)
+	var TotalPoints float64 = float64(card.Badges.CheckItems)
+	if (points == 0 || TotalPoints == 0) && weight != 0 {
+		return 0, weight
+	}
+	return points*weight, TotalPoints*weight
 }

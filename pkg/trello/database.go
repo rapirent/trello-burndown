@@ -29,35 +29,60 @@ type CardProgress struct {
 	Points  float64
 }
 
+type CardRecord struct {
+	ID         string `gorm:"primary_key"`
+	LastPoints float64
+}
+
 // GetDatabase returns a sqlite3 database connection.
 func GetDatabase() *gorm.DB {
 	db, err := gorm.Open(viper.GetString("database.dialect"), viper.GetString("database.url"))
 	if err != nil {
 		log.Fatalln(err)
 	}
-	db.AutoMigrate(&Board{}, &CardProgress{})
+	db.AutoMigrate(&Board{}, &CardProgress{}, &CardRecord{})
 	return db
 }
 
-func saveToDatabase(board Board, m map[string]float64) {
+func getCardLastPointsFromDatabase(ID string) float64 {
+	db := GetDatabase()
+	defer db.Close()
+	oldCard := CardRecord{}
+	db.Where("id = ?", ID).First(&oldCard)
+
+	return oldCard.LastPoints
+}
+
+func saveProgressToDatabase(board Board, pointsToday float64) {
 	db := GetDatabase()
 	defer db.Close()
 	oldBoard := Board{}
 	db.Where("id = ?", board.ID).First(&oldBoard)
 	db.Model(oldBoard).Updates(&board)
-	db.Unscoped().Where("board_id = ?", board.ID).Delete(CardProgress{})
-	pointsInWeekend := 0.0
-	for date, points := range m {
-		date, _ := time.Parse("2006-01-02", date)
-		if date.Weekday() == time.Saturday || date.Weekday() == time.Sunday {
-			pointsInWeekend += points
-			continue
-		}
-		db.Save(&CardProgress{
-			Date:    date,
-			Points:  points + pointsInWeekend,
-			BoardID: board.ID,
-		})
-		pointsInWeekend = 0
+	dateNow := time.Now()
+	date := time.Date(dateNow.Year(), dateNow.Month(), dateNow.Day(), 0, 0, 0, 0, dateNow.Location())
+	oldCardProgress := CardProgress{}
+	newCardProgress := CardProgress{
+		Date:    date,
+		Points:  pointsToday,
+		BoardID: board.ID,
 	}
+	result := db.Where("date = ?", date).First(&oldCardProgress)
+	if result.Error != nil {
+		db.Save(&newCardProgress)
+		return
+	}
+	db.Model(oldCardProgress).Updates(&newCardProgress)
+}
+
+func saveCardToDatabase(card CardRecord) {
+	db := GetDatabase()
+	defer db.Close()
+	oldCard := CardRecord{}
+	results := db.Where("id = ?", card.ID).First(&oldCard)
+	if results.Error != nil {
+		db.Save(&card)
+		return
+	}
+	db.Model(oldCard).Updates(&card)
 }

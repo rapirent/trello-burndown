@@ -10,7 +10,7 @@
     var totalPoints = {{ .Board.Points }};
     var pointsSpentPerDay = {
       {{- range .Board.CardProgress -}}
-        {{ .Date.Format "2006-01-02" }}: {{ .Points }},
+        {{ .Date }}: {{ .Points }},
       {{- end -}}
     };
     var days = [
