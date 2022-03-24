@@ -89,13 +89,16 @@ func Run(boardID string) {
 		boardEntity.PointsCompleted += response.Points
 		pointsToday += response.Points
 		boardEntity.Cards++
-		lastPoints := getCardLastPointsFromDatabase(response.ID)
+		lastPoints, updated := getCardLastPointsFromDatabase(response.ID)
 		cardEntity := CardRecord{
 			ID:	response.ID,
 			LastPoints: response.Points,
+			UpdatedAt: time.Now(),
 		}
 		saveCardToDatabase(cardEntity)
-		pointsToday -= lastPoints
+		if updated == false {
+			pointsToday -= lastPoints
+		}
 	}
 	log.Printf("Cards progress: %d/%d", boardEntity.CardsCompleted, boardEntity.Cards)
 	log.Printf("Total points: %f/%f", boardEntity.PointsCompleted, boardEntity.Points)

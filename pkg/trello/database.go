@@ -31,6 +31,7 @@ type CardProgress struct {
 
 type CardRecord struct {
 	ID         string `gorm:"primary_key"`
+	UpdatedAt  time.Time
 	LastPoints float64
 }
 
@@ -44,13 +45,22 @@ func GetDatabase() *gorm.DB {
 	return db
 }
 
-func getCardLastPointsFromDatabase(ID string) float64 {
+func getCardLastPointsFromDatabase(ID string) (float64, bool) {
 	db := GetDatabase()
 	defer db.Close()
 	oldCard := CardRecord{}
-	db.Where("id = ?", ID).First(&oldCard)
+	results := db.Where("id = ?", ID).First(&oldCard)
+	if results != nil {
+		return 0.0, true
+	}
+	dateNow := time.Now()
+	if dateNow.Day() == oldCard.UpdatedAt.Day() &&
+		dateNow.Month() == oldCard.UpdatedAt.Month() &&
+		dateNow.Year() == oldCard.UpdatedAt.Year() {
+		return 0.0, true
+	}
 
-	return oldCard.LastPoints
+	return oldCard.LastPoints, false
 }
 
 func saveProgressToDatabase(board Board, pointsToday float64) {
