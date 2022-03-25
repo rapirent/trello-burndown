@@ -1,5 +1,5 @@
 # trello-burndown
-[![Go Report Card](https://goreportcard.com/badge/github.com/mtricht/trello-burndown)](https://goreportcard.com/report/github.com/mtricht/trello-burndown)
+![Go Report Card](https://goreportcard.com/badge/github.com/rapirent/trello-burndown)(https://goreportcard.com/report/github.com/rapirent/trello-burndown)
 
 An easy to use SCRUM burndown chart for Trello boards.
 
@@ -11,7 +11,6 @@ Or compile the binary or docker image [from source](#compile-from-source).
 ### How it works
 
 - The points must be present in the title between parenthesis like so: `(2) Add login page`
-- The last column of the board is where finished cards are found.
 - Weekends are ignored. Points that were completed in the weekend are appointed to the next monday.
 
 ### Screenshots

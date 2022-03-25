@@ -1,12 +1,8 @@
-install: bindata
+install:
 	go install .
 
-build: bindata
-	go get github.com/mitchellh/gox
-	gox -osarch="linux/amd64" -cgo -output="build/trello-burndown_{{.OS}}_{{.Arch}}" ./cmd/
-
-bindata:
-	go-bindata -o assets/views.go -pkg assets assets/...
+build:
+	GOOS=darwin GOARCH=arm64 go build -o build/trello-burndown_${GOOS}_${GOARCH} ./cmd/
 
 docker:
 	docker build --no-cache -t trello-burndown .
@@ -14,4 +10,4 @@ docker:
 run: install
 	trello-burndown
 
-.PNONY: install build bindata docker run
+.PNONY: install build docker run

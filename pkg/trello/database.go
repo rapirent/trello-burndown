@@ -29,10 +29,11 @@ type CardProgress struct {
 	Points  float64
 }
 
-type CardRecord struct {
-	ID         string `gorm:"primary_key"`
-	UpdatedAt  time.Time
-	LastPoints float64
+type BoardProgress struct {
+	gorm.Model
+	BoardID string
+	Date    time.Time
+	PointsCompleted  float64
 }
 
 // GetDatabase returns a sqlite3 database connection.
@@ -41,26 +42,8 @@ func GetDatabase() *gorm.DB {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	db.AutoMigrate(&Board{}, &CardProgress{}, &CardRecord{})
+	db.AutoMigrate(&Board{}, &CardProgress{}, &BoardProgress{})
 	return db
-}
-
-func getCardLastPointsFromDatabase(ID string) (float64, bool) {
-	db := GetDatabase()
-	defer db.Close()
-	oldCard := CardRecord{}
-	results := db.Where("id = ?", ID).First(&oldCard)
-	if results != nil {
-		return 0.0, true
-	}
-	dateNow := time.Now()
-	if dateNow.Day() == oldCard.UpdatedAt.Day() &&
-		dateNow.Month() == oldCard.UpdatedAt.Month() &&
-		dateNow.Year() == oldCard.UpdatedAt.Year() {
-		return 0.0, true
-	}
-
-	return oldCard.LastPoints, false
 }
 
 func saveProgressToDatabase(board Board, pointsToday float64) {
@@ -69,30 +52,39 @@ func saveProgressToDatabase(board Board, pointsToday float64) {
 	oldBoard := Board{}
 	db.Where("id = ?", board.ID).First(&oldBoard)
 	db.Model(oldBoard).Updates(&board)
+	dateYst := time.Now().AddDate(0, 0, -1)
+	yesterday := time.Date(dateYst.Year(), dateYst.Month(), dateYst.Day(), 0, 0, 0, 0, dateYst.Location())
+	ytdBoardProgress := BoardProgress{}
+	var pointsYesterday float64 = 0
+	result := db.Where("date = ? AND board_id =?", yesterday, board.ID).First(&ytdBoardProgress)
+	if result.Error == nil {
+		pointsYesterday = ytdBoardProgress.PointsCompleted
+	}
 	dateNow := time.Now()
-	date := time.Date(dateNow.Year(), dateNow.Month(), dateNow.Day(), 0, 0, 0, 0, dateNow.Location())
+	today := time.Date(dateNow.Year(), dateNow.Month(), dateNow.Day(), 0, 0, 0, 0, dateNow.Location())
 	oldCardProgress := CardProgress{}
 	newCardProgress := CardProgress{
-		Date:    date,
-		Points:  pointsToday,
+		Date:    today,
+		Points:  pointsToday - pointsYesterday,
 		BoardID: board.ID,
 	}
-	result := db.Where("date = ?", date).First(&oldCardProgress)
+	result = db.Where("date = ? AND board_id = ?", today, board.ID).First(&oldCardProgress)
 	if result.Error != nil {
 		db.Save(&newCardProgress)
-		return
+	} else {
+		db.Model(oldCardProgress).Updates(&newCardProgress)
 	}
-	db.Model(oldCardProgress).Updates(&newCardProgress)
-}
 
-func saveCardToDatabase(card CardRecord) {
-	db := GetDatabase()
-	defer db.Close()
-	oldCard := CardRecord{}
-	results := db.Where("id = ?", card.ID).First(&oldCard)
-	if results.Error != nil {
-		db.Save(&card)
-		return
+	oldBoardProgress := BoardProgress{}
+	newBoardProgress := BoardProgress{
+		Date: today,
+		PointsCompleted: pointsToday,
+		BoardID: board.ID,
 	}
-	db.Model(oldCard).Updates(&card)
+	result = db.Where("date = ? AND board_id = ?", today, board.ID).First(&oldBoardProgress)
+	if result.Error != nil {
+		db.Save(&newBoardProgress)
+	} else {
+		db.Model(oldBoardProgress).Updates(&oldBoardProgress)
+	}
 }
