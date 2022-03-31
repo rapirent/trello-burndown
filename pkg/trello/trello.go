@@ -73,7 +73,6 @@ func Run(boardID string) {
 		ID:   boardID,
 		Name: board.Name,
 	}
-	var pointsToday float64 = 0.0;
 	for i := 0; i < len(cards); i++ {
 		response := <-resultChannel
 		if response.Error != nil {
@@ -91,7 +90,7 @@ func Run(boardID string) {
 	}
 	log.Printf("Cards progress: %d/%d", boardEntity.CardsCompleted, boardEntity.Cards)
 	log.Printf("Total points: %f/%f", boardEntity.PointsCompleted, boardEntity.Points)
-	saveProgressToDatabase(boardEntity, pointsToday)
+	saveProgressToDatabase(boardEntity, boardEntity.PointsCompleted)
 }
 
 func getLastList(board *trello.Board) (string, error) {
